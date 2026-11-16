@@ -31,7 +31,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y valgrind
       - run: cmake -S . -B build -DCMAKE_C_COMPILER=gcc -DMSTR_CHECKED=ON && cmake --build build -j
-      - run: ctest --test-dir build -T memcheck --output-on-failure
+      # Fast single-process tests only: test_m5 (1.5M checks) and the fork-based death/alloc tests
+      # are covered by the sanitizer jobs and would be slow or noisy under valgrind.
+      - run: ctest --test-dir build -T memcheck -R '^(m1|m2|m2_strict_scope|m4|cpp_wrapper|thread_exit|share_threads_2)$' --output-on-failure
+        env:
+          MSTR_NO_ROOT_WARNING: "1"
 
   cxx20-and-bench:
     runs-on: ubuntu-latest
