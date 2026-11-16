@@ -1,0 +1,59 @@
+# build trees
+/build*/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# objects, libraries, binaries
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# built example/test/bench programs when compiled in place
+/ex_*
+/test_*
+/bench/bench
+/readme_*
+
+# fuzzing artifacts and corpora
+crash-*
+oom-*
+timeout-*
+leak-*
+slow-unit-*
+/corpus*/
+/corp_*/
+fuzz-*.log
+
+# sanitizer / debugger / profiler output
+*.log
+core
+core.*
+vgcore.*
+callgrind.out.*
+perf.data*
+
+# editors, OS, tooling
+.vscode/
+.idea/
+.cache/
+.clangd
+*.swp
+*~
+.DS_Store
+Thumbs.db
+__pycache__/
