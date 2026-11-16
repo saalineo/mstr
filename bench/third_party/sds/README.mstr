@@ -1,0 +1,4 @@
+SDS (Simple Dynamic Strings) by Salvatore Sanfilippo, BSD-2-Clause (see LICENSE).
+Upstream: https://github.com/antirez/sds  commit 5347739b1581fcba74fd5cab1fc21d2aef317d71
+sds.c and sds.h are vendored UNMODIFIED. sdsalloc.h is replaced by ../../sds_shim/sdsalloc.h so
+the benchmark can count allocations.
