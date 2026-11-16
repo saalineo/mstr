@@ -44,8 +44,8 @@ jobs:
       - name: C++20 header check (reversed comparison operators)
         run: |
           cmake -S . -B build -DCMAKE_CXX_STANDARD=20 -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
-          cmake --build build --target test_cpp test_header_cpp -j
-          ctest --test-dir build -R "cpp"
+          cmake --build build -j   # all targets: -R "cpp" also matches the portable_*cpp variants
+          ctest --test-dir build -R "cpp" --output-on-failure
       - name: Benchmark builds and all implementations agree
         run: |
           cmake -S . -B bbuild -DMSTR_BENCH=ON -DCMAKE_C_COMPILER=gcc
