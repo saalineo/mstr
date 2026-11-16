@@ -73,7 +73,11 @@ int main()
         std::size_t n = 0;
         mstr_each(tok, S("a,b,c"), S(",")) { n += tok.size(); }
         CHECK(n == 3);
+#ifdef MSTR_PIPE /* needs GNU statement expressions: absent on MSVC */
         mstr r = MSTR_PIPE(S("  mixed Case value  "), mstr_trim, mstr_upper, mstr_replace_all(S(" "), S("_")));
+#else
+        mstr r = mstr_replace_all(mstr_upper(mstr_trim(S("  mixed Case value  "))), S(" "), S("_"));
+#endif
         CHECK(r == S("MIXED_CASE_VALUE"));
         CHECK(std::strcmp(MSTR_CSTR(r), "MIXED_CASE_VALUE") == 0);
     }

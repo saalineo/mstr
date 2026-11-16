@@ -23,6 +23,7 @@ static int g_fail, g_run;
 static uint64_t rs = 0x9E3779B97F4A7C15ull;
 static uint64_t rnd(void) { rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return rs; }
 
+#ifdef MSTR_PIPE
 static mstr big(size_t n, char ch)
 {
     mstr r;
@@ -32,6 +33,7 @@ static mstr big(size_t n, char ch)
     free(d);
     return r;
 }
+#endif
 static int is_nul_term(mstr s) { return mstr_ptr(&s)[mstr_len(s)] == '\0'; }
 static mstr B(const char *bytes, size_t n) { return mstr_from_n(bytes, n); }
 #define BYTES(lit) B(lit, sizeof(lit) - 1u)
@@ -216,6 +218,7 @@ static void test_u8_properties(void)
 
 /* ======================= pipeline ======================= */
 
+#ifdef MSTR_PIPE /* statement expressions: gcc/clang/clang-cl. MSVC runs the explicit-API property test below. */
 static void test_pipe_basic(void)
 {
     mstr_scope {
@@ -304,6 +307,7 @@ static void test_pipe_chunks(void)
         CHECK(mstr_debug_arena_used_() < before + 2000 + 2000 + 64);
     }
 }
+#endif /* MSTR_PIPE */
 
 typedef struct { int kind; mstr a, b; size_t i, j; } step;
 static mstr apply(mstr v, const step *s)
@@ -368,7 +372,11 @@ static void test_pipe_property(void)
 
 int main(void)
 {
+#ifdef _WIN32
+    _putenv_s("MSTR_NO_ROOT_WARNING", "1"); /* MSVC has no setenv */
+#else
     setenv("MSTR_NO_ROOT_WARNING", "1", 1);
+#endif
     test_u8_basics();
     test_u8_exhaustive();
     test_u8_policy();

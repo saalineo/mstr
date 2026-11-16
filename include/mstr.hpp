@@ -25,7 +25,7 @@
 
 class mstr::Scope {
 public:
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef MSTR_GNU_
     // File and line of the caller, so checked-mode messages point at the user's scope.
     explicit Scope(const char *file = __builtin_FILE(), int line = __builtin_LINE())
         : s_(mstr_scope_enter_(file, line)) {}

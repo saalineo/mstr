@@ -8,6 +8,19 @@
 #include <stdint.h>
 #include <string.h>
 
+/* GNU extensions (attributes, statement expressions, cleanup). Define MSTR_NO_GNU_EXT to
+ * force the portable code paths on gcc/clang (used by the tests to exercise the MSVC variant). */
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(MSTR_NO_GNU_EXT)
+#define MSTR_GNU_ 1
+#endif
+/* Without GNU extensions there is no cleanup attribute, so mstr_scope is the strict variant. */
+#if !defined(MSTR_GNU_) && !defined(MSTR_STRICT_SCOPE)
+#define MSTR_STRICT_SCOPE 1
+#endif
+#if defined(MSTR_GNU_) && !defined(MSTR_STRICT_SCOPE)
+#define MSTR_HAVE_CLEANUP_ 1
+#endif
+
 #ifdef __cplusplus
 #if (defined(_MSVC_LANG) ? _MSVC_LANG : __cplusplus) >= 201703L
 #define MSTR_CXX17_ 1
@@ -21,7 +34,7 @@ extern "C" {
 #error "mstr supports 64-bit targets only (see docs/DESIGN.md)"
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef MSTR_GNU_
 #define MSTR_NORETURN __attribute__((noreturn))
 #elif defined(_MSC_VER)
 #define MSTR_NORETURN __declspec(noreturn)
@@ -207,7 +220,7 @@ mstr mstr_upper(mstr s);                           /* ASCII only; unchanged -> s
 mstr mstr_lower(mstr s);
 mstr mstr_repeat(mstr s, size_t times);
 mstr mstr_join(mstr sep, const mstr *parts, size_t count);
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef MSTR_GNU_
 mstr mstr_fmt(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #else
 mstr mstr_fmt(const char *fmt, ...);
@@ -245,7 +258,7 @@ void *mstr_scope_alloc(size_t n);
 /* Frees this thread's arena. Run automatically at thread exit on POSIX. */
 void mstr_thread_cleanup(void);
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(MSTR_STRICT_SCOPE)
+#ifdef MSTR_HAVE_CLEANUP_
 /* break / return / goto out of the block still rewind (cleanup attribute).
  * `continue` and `break` bind to this macro's own loop. */
 static inline void mstr_scope_cleanup_(mstr_scope_t *s) { mstr_scope_leave(s); }
@@ -330,7 +343,7 @@ typedef struct mstr_box {
 mstr_box mstr_own(mstr s);             /* copies; does not consume s */
 mstr mstr_unbox(const mstr_box *b);    /* SSO copy, or a VIEW into the box buffer */
 void mstr_box_free(mstr_box *b);       /* idempotent */
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef MSTR_GNU_
 #define mstr_box_auto mstr_box __attribute__((cleanup(mstr_box_free)))
 #else
 #define mstr_box_auto mstr_box
@@ -433,7 +446,7 @@ mstr mstr_pipe_end_(mstr_pipe_t *p);
     MSTR_PIPE_PICK_(__VA_ARGS__, MSTR_PS10_, MSTR_PS9_, MSTR_PS8_, MSTR_PS7_,   \
                     MSTR_PS6_, MSTR_PS5_, MSTR_PS4_, MSTR_PS3_, MSTR_PS2_,      \
                     MSTR_PS1_, _)(__VA_ARGS__)
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef MSTR_GNU_
 #define MSTR_PIPE(x, ...)                                                       \
     __extension__({                                                             \
         mstr_pipe_t mstr_pp_ = mstr_pipe_begin_(x);                             \

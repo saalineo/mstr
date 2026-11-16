@@ -93,7 +93,7 @@ static void test_box_escapes_scope(void)
         CHECK(mstr_len(back) == 33 && mstr_eq(back, nul) && mstr_ptr(&back)[31] == '\0');
         mstr_box_free(&b);
     }
-#ifndef MSTR_STRICT
+#ifdef MSTR_GNU_ /* mstr_box_auto needs the cleanup attribute */
     { /* the cleanup attribute frees at scope exit */
         mstr_box_auto a = mstr_own(big(50, 'c'));
         CHECK(a.kind == 2);

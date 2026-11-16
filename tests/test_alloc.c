@@ -166,7 +166,9 @@ static void workload(void)
     {
         mstr_box a = mstr_own(mstr_repeat(S("ab"), 100)), c = mstr_own(S("tiny"));
         mstr_box_free(&a); mstr_box_free(&a); mstr_box_free(&c);
+#ifdef MSTR_GNU_
         { mstr_box_auto d = mstr_own(mstr_repeat(S("cd"), 50)); CHECK(d.kind == 2); }
+#endif
     }
     sh = mstr_share(mstr_repeat(S("shared-bytes!"), 4));
     {
