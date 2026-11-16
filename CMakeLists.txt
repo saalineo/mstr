@@ -19,6 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Directory-wide options must come BEFORE the targets they should apply to.
 if(MSVC)
   add_compile_options(/W4)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS) # getenv etc.: the "safe" variants are MSVC-only
 else()
   add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Werror)
 endif()
@@ -40,7 +41,11 @@ if(MSTR_CHECKED)
   target_compile_definitions(mstr PUBLIC MSTR_CHECKED)
 endif()
 
-enable_testing()
+# include(CTest) (not just enable_testing) writes DartConfiguration.tcl, which `ctest -T memcheck` needs.
+# Options must be set before the include. --error-exitcode makes a valgrind finding fail the test.
+set(MEMORYCHECK_COMMAND_OPTIONS "--leak-check=full --errors-for-leak-kinds=definite --error-exitcode=1"
+    CACHE STRING "valgrind options for ctest -T memcheck")
+include(CTest)
 add_executable(test_m1 tests/test_m1.c)
 target_link_libraries(test_m1 mstr)
 add_test(NAME m1 COMMAND test_m1)
@@ -124,6 +129,26 @@ if(MSTR_FUZZ)
     target_compile_options(fuzz_${h} PRIVATE -fsanitize=fuzzer-no-link,address,undefined -g)
     target_link_options(fuzz_${h} PRIVATE -fsanitize=fuzzer,address,undefined)
     add_test(NAME fuzz_smoke_${h} COMMAND fuzz_${h} -max_total_time=10 -max_len=512)
+  endforeach()
+endif()
+
+# MSVC simulation: the same tests compiled with MSTR_NO_GNU_EXT, i.e. the header's portable
+# code paths (strict mstr_scope, no MSTR_PIPE / noreturn / cleanup attribute). This is how
+# the non-GNU variant is exercised on Linux; a real MSVC job runs them natively.
+if(NOT MSVC)
+  foreach(t m1 m2 m4 m5)
+    add_executable(test_${t}_portable tests/test_${t}.c)
+    target_compile_definitions(test_${t}_portable PRIVATE MSTR_NO_GNU_EXT)
+    target_link_libraries(test_${t}_portable mstr)
+    add_test(NAME portable_${t} COMMAND test_${t}_portable)
+    set_tests_properties(portable_${t} PROPERTIES ENVIRONMENT MSTR_NO_ROOT_WARNING=1)
+  endforeach()
+  foreach(t cpp header_cpp)
+    add_executable(test_${t}_portable tests/test_${t}.cpp)
+    target_compile_definitions(test_${t}_portable PRIVATE MSTR_NO_GNU_EXT)
+    target_link_libraries(test_${t}_portable mstr)
+    add_test(NAME portable_${t} COMMAND test_${t}_portable)
+    set_tests_properties(portable_${t} PROPERTIES ENVIRONMENT MSTR_NO_ROOT_WARNING=1)
   endforeach()
 endif()
 
