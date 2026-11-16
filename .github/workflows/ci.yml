@@ -1,0 +1,68 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  unix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [{c: gcc, cxx: g++}, {c: clang, cxx: clang++}]
+        checked: [OFF, ON]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (ASan+UBSan, -Werror, C99 + C++17)
+        run: cmake -S . -B build -DCMAKE_C_COMPILER=${{ matrix.cc.c }} -DCMAKE_CXX_COMPILER=${{ matrix.cc.cxx }}
+             -DMSTR_SANITIZE=ON -DMSTR_CHECKED=${{ matrix.checked }}
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+
+  tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DMSTR_TSAN=ON -DMSTR_CHECKED=ON
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: cmake -S . -B build -DCMAKE_C_COMPILER=gcc -DMSTR_CHECKED=ON && cmake --build build -j
+      - run: ctest --test-dir build -T memcheck --output-on-failure
+
+  cxx20-and-bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: C++20 header check (reversed comparison operators)
+        run: |
+          cmake -S . -B build -DCMAKE_CXX_STANDARD=20 -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          cmake --build build --target test_cpp test_header_cpp -j
+          ctest --test-dir build -R "cpp"
+      - name: Benchmark builds and all implementations agree
+        run: |
+          cmake -S . -B bbuild -DMSTR_BENCH=ON -DCMAKE_C_COMPILER=gcc
+          cmake --build bbuild --target bench -j
+          ./bbuild/bench | head -3
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_C_COMPILER=clang -DMSTR_FUZZ=ON -DMSTR_CHECKED=ON
+      - run: cmake --build build -j
+      - run: MSTR_NO_ROOT_WARNING=1 ctest --test-dir build -R fuzz_smoke --output-on-failure
+
+  # The core is compiled as C; MSVC has no cleanup attribute, so this job
+  # exercises the strict mstr_scope variant (test_m2_strict). Death tests and
+  # the thread-exit test are POSIX-only and skipped here.
+  windows-clang-cl:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -T ClangCL
+      - run: cmake --build build --config Release
+      - run: ctest --test-dir build -C Release --output-on-failure
