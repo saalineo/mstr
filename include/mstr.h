@@ -218,6 +218,18 @@ mstr mstr_replace(mstr s, mstr from, mstr to);     /* first match; no match -> s
 mstr mstr_replace_all(mstr s, mstr from, mstr to); /* empty `from` -> s unchanged */
 mstr mstr_upper(mstr s);                           /* ASCII only; unchanged -> s */
 mstr mstr_lower(mstr s);
+
+/* Fused hot-path equivalent to
+ * mstr_replace_all(mstr_upper(mstr_trim(s)), from, to), or with lower/keep.
+ * It makes one result at most, rather than materialising every intermediate.
+ * `from` is matched after the requested ASCII case mapping. */
+typedef enum mstr_ascii_case {
+    MSTR_ASCII_KEEP = 0,
+    MSTR_ASCII_UPPER = 1,
+    MSTR_ASCII_LOWER = 2
+} mstr_ascii_case;
+mstr mstr_trim_case_replace_all(mstr s, mstr_ascii_case ascii_case, mstr from, mstr to);
+
 mstr mstr_repeat(mstr s, size_t times);
 mstr mstr_join(mstr sep, const mstr *parts, size_t count);
 #ifdef MSTR_GNU_

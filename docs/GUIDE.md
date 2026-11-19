@@ -186,6 +186,7 @@ mstr mstr_cat(mstr a, mstr b);
 mstr mstr_replace(mstr s, mstr from, mstr to);       // first match only
 mstr mstr_replace_all(mstr s, mstr from, mstr to);
 mstr mstr_upper(mstr s);  mstr mstr_lower(mstr s);   // ASCII only
+mstr mstr_trim_case_replace_all(mstr s, mstr_ascii_case mode, mstr from, mstr to);
 mstr mstr_repeat(mstr s, size_t times);
 mstr mstr_join(mstr sep, const mstr *parts, size_t count);
 ```
@@ -207,6 +208,18 @@ Details worth knowing:
 * `mstr_replace_all` with an empty `from` returns the input unchanged. Matches do not overlap: replacing
   `"aa"` in `"aaa"` gives one replacement.
 * `upper`/`lower` change only ASCII letters, so UTF-8 text is never corrupted (see [section 13](#13-utf-8)).
+
+For a hot normalisation path, fuse trim, case mapping, and replacement rather than nesting three
+general transforms:
+
+```c
+mstr key = mstr_trim_case_replace_all(line, MSTR_ASCII_UPPER, S(" "), S("_"));
+// exactly: mstr_replace_all(mstr_upper(mstr_trim(line)), S(" "), S("_"))
+```
+
+`MSTR_ASCII_KEEP`, `MSTR_ASCII_UPPER`, and `MSTR_ASCII_LOWER` select the mapping. The pattern is
+matched after mapping; the fused operation makes at most one result allocation and performs no
+intermediate `mstr` calls.
 
 ## 7. Scopes in depth
 

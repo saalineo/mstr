@@ -278,6 +278,12 @@ is the by-value 24-byte representation and non-inlined library calls. You buy me
 simplicity, not speed. `MSTR_PIPE` halves the bytes still held after a chain (112 vs 224 here) but
 does **not** reduce the number of arena allocations, and costs about 19% more time.
 
+When a normalisation chain is a measured hot path, use
+`mstr_trim_case_replace_all(s, MSTR_ASCII_UPPER, from, to)`. It is equivalent to
+`mstr_replace_all(mstr_upper(mstr_trim(s)), from, to)`, but scans/writes one final result instead of
+materialising each intermediate value. It is the performance escape hatch for this common chain;
+the ordinary composable calls remain the clearer default.
+
 ## Limits
 
 64-bit only (32-bit is rejected at compile time). Strings longer than the arena's address space are

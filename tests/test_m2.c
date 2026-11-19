@@ -74,6 +74,16 @@ static void test_case_fmt_misc(void)
         CHECK(mstr_state(&lng) == MSTR_REGION && mstr_eq(lng, S("abcdefghijklmnopqrstuvwxyz0123456789")));
         CHECK(mstr_eq(mstr_upper(mstr_from_n("\xe9z", 2)), mstr_from_n("\xe9Z", 2))); /* bytes >127 untouched */
 
+        /* The fused form has exactly the nested operation's semantics, but no
+         * intermediate REGIONs. Its match is against the case-mapped bytes. */
+        mstr fused = mstr_trim_case_replace_all(S("  a b a b a b a b a b a b  "),
+                                                 MSTR_ASCII_UPPER, S("A B"), S("long"));
+        mstr nested = mstr_replace_all(mstr_upper(mstr_trim(S("  a b a b a b a b a b a b  "))),
+                                       S("A B"), S("long"));
+        CHECK(mstr_eq(fused, nested) && mstr_state(&fused) == MSTR_REGION && is_nul_term(fused));
+        CHECK(mstr_eq(mstr_trim_case_replace_all(S("  MiXeD  "), MSTR_ASCII_LOWER, S("ix"), S("_")), S("m_ed")));
+        CHECK(mstr_eq(mstr_trim_case_replace_all(S("  unchanged  "), MSTR_ASCII_KEEP, S(""), S("x")), S("unchanged")));
+
         mstr f = mstr_fmt("%d-%s", 42, "x");
         CHECK(mstr_state(&f) == MSTR_SSO && mstr_eq(f, S("42-x")));
         mstr f22 = mstr_fmt("%022d", 7);
@@ -329,9 +339,10 @@ static void test_properties(void)
     int it;
     for (it = 0; it < 20000; it++) mstr_scope {
         size_t sl = (size_t)(rnd() % 120), fl = 1 + (size_t)(rnd() % 3), tl = (size_t)(rnd() % 6), i, on;
-        for (i = 0; i < sl; i++) sbuf[i] = (char)("ab\0"[rnd() % 3]);
-        for (i = 0; i < fl; i++) fbuf[i] = (char)("ab\0"[rnd() % 3]);
-        for (i = 0; i < tl; i++) tbuf[i] = (char)("xy"[rnd() % 2]);
+        mstr_ascii_case mode = (mstr_ascii_case)(rnd() % 3);
+        for (i = 0; i < sl; i++) sbuf[i] = (char)(" aAbB\0"[rnd() % 6]);
+        for (i = 0; i < fl; i++) fbuf[i] = (char)("aAbB\0"[rnd() % 5]);
+        for (i = 0; i < tl; i++) tbuf[i] = (char)("xY "[rnd() % 3]);
         mstr s = mstr_from_n(sbuf, sl), f = mstr_from_n(fbuf, fl), t = mstr_from_n(tbuf, tl);
         mstr r = mstr_replace_all(s, f, t);
         on = naive_replace_all(sbuf, sl, fbuf, fl, tbuf, tl, obuf);
@@ -346,6 +357,15 @@ static void test_properties(void)
         mstr c1 = mstr_cat(mstr_cat(s, f), t), c2 = mstr_cat(s, mstr_cat(f, t));
         CHECK(mstr_eq(c1, c2) && mstr_len(c1) == sl + fl + tl);
         if (mstr_len(c1) <= MSTR_SSO_MAX) CHECK(mstr_state(&c1) == MSTR_SSO);
+
+        {
+            mstr trimmed = mstr_trim(s);
+            mstr cased = mode == MSTR_ASCII_UPPER ? mstr_upper(trimmed) :
+                         mode == MSTR_ASCII_LOWER ? mstr_lower(trimmed) : trimmed;
+            mstr nested = mstr_replace_all(cased, f, t);
+            mstr fused = mstr_trim_case_replace_all(s, mode, f, t);
+            CHECK(mstr_eq(fused, nested));
+        }
     }
 }
 

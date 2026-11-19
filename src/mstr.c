@@ -700,6 +700,110 @@ static mstr casemap_(mstr s, int up)
 mstr mstr_upper(mstr s) { return casemap_(s, 1); }
 mstr mstr_lower(mstr s) { return casemap_(s, 0); }
 
+/* Fused trim + ASCII case map + replace-all. This deliberately has a narrow
+ * contract: it creates only the final result, never intermediate mstrs. */
+static inline unsigned char ascii_case_(unsigned char c, mstr_ascii_case mode)
+{
+    if (mode == MSTR_ASCII_UPPER && (unsigned)(c - 'a') < 26u) return (unsigned char)(c ^ 0x20u);
+    if (mode == MSTR_ASCII_LOWER && (unsigned)(c - 'A') < 26u) return (unsigned char)(c ^ 0x20u);
+    return c;
+}
+
+static inline int match_case_(const char *p, const char *from, size_t n, mstr_ascii_case mode)
+{
+    size_t i;
+    for (i = 0; i < n; i++)
+        if (ascii_case_((unsigned char)p[i], mode) != (unsigned char)from[i]) return 0;
+    return 1;
+}
+
+mstr mstr_trim_case_replace_all(mstr s, mstr_ascii_case mode, mstr from, mstr to)
+{
+    const char *sp = mstr_ptr(&s), *fp = mstr_ptr(&from), *tp = mstr_ptr(&to);
+    size_t sl = mstr_len(s), b = 0, e = sl, n, fl = mstr_len(from), tl = mstr_len(to);
+    size_t i, pos, count = 0, nl;
+    int changed = 0;
+    mstr r;
+    char *d;
+
+    if (mode != MSTR_ASCII_KEEP && mode != MSTR_ASCII_UPPER && mode != MSTR_ASCII_LOWER)
+        mstr_fail_(0, 0, "mstr_trim_case_replace_all: invalid ASCII case mode");
+    while (b < e && is_ws_(sp[b])) b++;
+    while (e > b && is_ws_(sp[e - 1])) e--;
+    n = e - b;
+
+    /* The overwhelmingly common normalisation form is one-byte replacement.
+     * Keep it as a straight loop so the compiler can turn the case map and
+     * substitution into conditional moves/vector operations. */
+    if (fl == 1 && tl == 1) {
+        unsigned char f = (unsigned char)fp[0], t = (unsigned char)tp[0];
+        d = new_(n, &r);
+        if (mode == MSTR_ASCII_UPPER) {
+            for (pos = 0; pos < n; pos++) {
+                unsigned char c = (unsigned char)sp[b + pos];
+                c = (unsigned)(c - 'a') < 26u ? (unsigned char)(c ^ 0x20u) : c;
+                d[pos] = (char)(c == f ? t : c);
+            }
+        } else if (mode == MSTR_ASCII_LOWER) {
+            for (pos = 0; pos < n; pos++) {
+                unsigned char c = (unsigned char)sp[b + pos];
+                c = (unsigned)(c - 'A') < 26u ? (unsigned char)(c ^ 0x20u) : c;
+                d[pos] = (char)(c == f ? t : c);
+            }
+        } else {
+            for (pos = 0; pos < n; pos++) {
+                unsigned char c = (unsigned char)sp[b + pos];
+                d[pos] = (char)(c == f ? t : c);
+            }
+        }
+        return r;
+    }
+
+    /* Equal-size substitutions need neither a match count nor a length pass. */
+    if (fl != 0 && fl == tl) {
+        d = new_(n, &r);
+        for (pos = 0; pos < n;) {
+            if (fl != 0 && pos + fl <= n && match_case_(sp + b + pos, fp, fl, mode)) {
+                if (tl) memcpy(d, tp, tl);
+                d += tl;
+                pos += fl;
+            } else {
+                *d++ = (char)ascii_case_((unsigned char)sp[b + pos], mode);
+                pos++;
+            }
+        }
+        return r;
+    }
+
+    for (i = 0; i < n; i++) {
+        if (ascii_case_((unsigned char)sp[b + i], mode) != (unsigned char)sp[b + i]) {
+            changed = 1;
+            break;
+        }
+    }
+    if (fl != 0) {
+        for (pos = 0; pos + fl <= n;) {
+            if (match_case_(sp + b + pos, fp, fl, mode)) { count++; pos += fl; }
+            else pos++;
+        }
+    }
+    if (count == 0 && !changed) return mstr_sub_(&s, b, n);
+
+    nl = add_(n - mul_(count, fl), mul_(count, tl));
+    d = new_(nl, &r);
+    for (pos = 0; pos < n;) {
+        if (fl != 0 && pos + fl <= n && match_case_(sp + b + pos, fp, fl, mode)) {
+            if (tl) memcpy(d, tp, tl);
+            d += tl;
+            pos += fl;
+        } else {
+            *d++ = (char)ascii_case_((unsigned char)sp[b + pos], mode);
+            pos++;
+        }
+    }
+    return r;
+}
+
 mstr mstr_repeat(mstr s, size_t times)
 {
     size_t n = mstr_len(s), total = mul_(n, times), i;

@@ -130,6 +130,16 @@ static size_t w1_mstr_pipe(const char *in, char *out, size_t cap)
     }
     return n;
 }
+static size_t w1_mstr_fused(const char *in, char *out, size_t cap)
+{
+    size_t n;
+    mstr_scope {
+        mstr r = mstr_trim_case_replace_all(mstr_from(in), MSTR_ASCII_UPPER, S(" "), S("_"));
+        n = mstr_len(r);
+        if (out && n < cap) memcpy(out, mstr_ptr(&r), n + 1);
+    }
+    return n;
+}
 /* mstr bytes still held when the chain is done (what a scope would keep alive) */
 static size_t w1_retained(int fused)
 {
@@ -139,6 +149,18 @@ static size_t w1_retained(int fused)
         size_t before = mstr_debug_arena_used_();
         mstr r = fused ? MSTR_PIPE(x, mstr_trim, mstr_upper, mstr_replace_all(S(" "), S("_")))
                        : mstr_replace_all(mstr_upper(mstr_trim(x)), S(" "), S("_"));
+        g_sink += mstr_len(r);
+        held = mstr_debug_arena_used_() - before;
+    }
+    return held;
+}
+static size_t w1_retained_transform(void)
+{
+    size_t held = 0;
+    mstr_scope {
+        mstr x = mstr_from(W1_IN);
+        size_t before = mstr_debug_arena_used_();
+        mstr r = mstr_trim_case_replace_all(x, MSTR_ASCII_UPPER, S(" "), S("_"));
         g_sink += mstr_len(r);
         held = mstr_debug_arena_used_() - before;
     }
@@ -311,8 +333,8 @@ int main(int argc, char **argv)
     mstr_allocator a;
     char ref[512], got[512];
     size_t rn, gn, i;
-    row r1[5], r2[6];
-    w1_fn f1[5] = {w1_malloc_steps, w1_malloc_fused, w1_sds, w1_mstr_nested, w1_mstr_pipe};
+    row r1[6], r2[6];
+    w1_fn f1[6] = {w1_malloc_steps, w1_malloc_fused, w1_sds, w1_mstr_nested, w1_mstr_pipe, w1_mstr_fused};
     w2_fn f2[6] = {w2_mstr_each, w2_mstr_each_prebuilt, w2_mstr_split, w2_sds, w2_malloc_dup, w2_malloc_scan};
 
     a.alloc = m_alloc; a.realloc = m_realloc; a.free = m_free; a.ctx = 0;
@@ -322,7 +344,7 @@ int main(int argc, char **argv)
 
     /* all implementations must agree before anything is timed */
     rn = w1_malloc_fused(W1_IN, ref, sizeof ref);
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 6; i++) {
         gn = f1[i](W1_IN, got, sizeof got);
         if (gn != rn || memcmp(ref, got, rn + 1) != 0) { fprintf(stderr, "W1 mismatch in impl %zu\n", i); return 1; }
     }
@@ -335,13 +357,14 @@ int main(int argc, char **argv)
     r1[2] = run_w1("SDS (in place)", f1[2], 0, 0);
     r1[3] = run_w1("mstr, nested calls", f1[3], 1, w1_retained(0));
     r1[4] = run_w1("mstr, MSTR_PIPE", f1[4], 1, w1_retained(1));
+    r1[5] = run_w1("mstr, fused transform", f1[5], 1, w1_retained_transform());
     r2[0] = run_w2("mstr_each, from char*", f2[0], 1);
     r2[1] = run_w2("mstr_each, input is mstr", f2[1], 1);
     r2[2] = run_w2("mstr_split", f2[2], 1);
     r2[3] = run_w2("SDS sdssplitlen", f2[3], 0);
     r2[4] = run_w2("malloc, strdup fields", f2[4], 0);
     r2[5] = run_w2("malloc, pointer scan", f2[5], 0);
-    print_rows("W1: trim + upper + replace (110-byte line)", r1, 5, md, 1);
+    print_rows("W1: trim + upper + replace (110-byte line)", r1, 6, md, 1);
     print_rows("W2: split a 20-field CSV line and sum trimmed lengths", r2, 6, md, 0);
     return g_sink == 0;
 }
